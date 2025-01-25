@@ -1,0 +1,90 @@
+name: my-docker-project
+
+services:
+  app:
+    build: .
+    image: my-app-image
+    container_name: my-app-container
+    command: /app/entrypoint.sh
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - app_network
+
+  postgres:
+    image: postgres
+    container_name: my-postgres-container
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  redis:
+    image: "redis:alpine"
+    container_name: my-redis-container
+    restart: unless-stopped
+    expose:
+      - 6379
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
+  celery:
+    image: my-app-image
+    container_name: my-celery-container
+    command: celery -A a_core worker -E -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres
+      - redis
+      - app
+    networks:
+      - app_network
+
+  flower:
+    image: my-app-image
+    container_name: my-flower-container
+    command: celery -A a_core flower --basic_auth=admin:password123 --broker=redis://redis:6379/0
+    expose:
+      - 5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    networks:
+      - app_network
+
+  beat:
+    image: my-app-image
+    container_name: my-beat-container
+    command: celery -A a_core beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - app
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app_network:
